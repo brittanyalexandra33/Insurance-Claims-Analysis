@@ -1,0 +1,159 @@
+---
+title: "Analysis between variables that impact liklihood of insurance claims"
+author: "Brittany Alexandra"
+date: "26/03/2023"
+output: html_notebook
+---
+
+
+# Relationship between the predictor variables (as a whole) and the likelihood of making a claim.
+```{r}
+library(MASS)
+data <- read.csv("~/Documents/STATS302 [Documents]/Assignment 2/A2claims.csv")
+
+#LDA on data set 
+data.lda<-lda(claim~., data=data)
+names(data.lda)
+
+#Prediction on data set
+pred.data <- predict(data.lda)
+names(pred.data)
+
+#Box plot of scores vs True Claim 
+#Lots of overlap which is not good 
+boxplot(pred.data$x~data$claim, 
+        main = "Boxplot of LDA scores vs True Claim", 
+        xlab = "LDA Score", 
+        ylab = "Claim",
+        horizontal = TRUE)
+
+#Plot of LDA scores vs Posterior probability of claim being filed
+plot(pred.data$x~pred.data$posterior[,2],
+     xlab = "Posterior Probability of a Claim",
+     ylab = "LDA Scores",
+     main = "LDA Scores vs Posterior Probability of a Claim")
+
+
+#Table of predicted classes
+table(pred.data$class,paste("real",data$claim))
+```
+Based on the table of predicted classes, we can assume no one is expected to make a claim. This is because the predicted probabilities are so low that no one is classed in a score of being predicted to make a claiom. 
+The Box plot of scores vs True Claim 
+
+In addition, the posterior probability that an observation will belong to 1 (a claim being filed) is based on the LDA Score. The graph shows that the posterior probability increases as LDA scores increase, suggesting that the LDA model is performing well at distinguishing between a claim being filed / not being filed. This is because as LDA scores increase, the posterior probability of belonging to the positive class (and vice versa).
+
+
+# Correlations between each of the original variables and the LDA Scores.
+## Factors that are strongly related to the score and what values of the predictor varaibles make it more likely that a claim is filed. 
+```{r}
+library(dplyr)
+library(corrplot)
+#Interpret canonical variables by looking at loading-correlations of new variables with original variables rather than scaling vector
+
+#A higher score correlates with 1 being the normal group. The negative correlations are correlated with 'bad' hence low scores on the LDA component 
+
+#Create an exmpty matrix with dimensions 13x1
+cor_matrix <- matrix(nrow = 13, ncol = 1)
+
+#Use a for-loop to compute the correlations between each variable in pred.data$x and each variable in data[,2:14] using the cor function. Set the row names of cor_matrix to the names of the 
+for(i in 1:13){
+cor_matrix[i] = round(cor(pred.data$x, data[,i+1]), 2)
+rownames(cor_matrix) = names(data)[2:14]
+}
+
+cor_matrix
+```
+Policy tenure has a strong high correlation of 0.86 between LD1 indicating that higher levels of policy tenure (i.e. holding a tenure for longer) are associated with a higher likelihood of making a claim. This could be because people are more likely to have at least one accident over a longer period of time rather than shorter. 
+
+The second highest correlation is the Age of Policyholder at 0.24, indicating that higher levels of age are more likely that a claim is filed. This could be because those who are older may have more expensive cars and therefore value them more. 
+
+Age of car has a moderately strong negative correlation of -0.31 indicating that higher ages of a car are associated with a lower LDA score, i.e are less likely to have a claim filed. This could be because those with more expensive cars are more concerned about maintaining the value. 
+
+Population density has a weak negative correlation of -0.19 indicating that higher populations are associated with a lower LDA score, i.e. are less likely to have a claim filed.
+
+
+## QDA In this dataset
+To see if QDA is optimal for this dataset we can inspect the scatterplot of each group of claim being filed/not filed.  
+```{r}
+par(mfrow = c(4,4), mex = 0.1)
+for (i in 1:13){
+  boxplot(data[,i+1] ~ data$claim)
+}
+
+#i + 1 selects the i'th variable in the dataframe excluding the first column (the label)
+```
+
+* QDA could be appropriate for this dataset because the classes do not have a linear boundary that is easily defined by a linear function. 
+* This is a large sample size of 58,592 where we only have 13 predictor variables, so the QDA is useful as the predictor variables can cause a high skew. 
+* Although the variances are similar, we can see there is a large negative skew for a claim not being filed against LDA score, and a slight negative skew for a claim being filed against LDA score indicating the varainces are not multivariate normal. Therefore, basing analysis on the WHOLE covariance matrix (in QDA) rather than on canonical variate we can use more information. 
+
+# Canonical correlation analysis
+```{r}
+library(mixOmics)
+library(vegan)
+
+policy_data <- data[,c(2,4,5)]
+car_data <- data[, c("age_of_car", "turning_radius", "length", "width", "height", "gross_weight", "ncap_rating", "nconvenience", "torque", "torque.rpm")]
+
+#Permutation test
+CCorA(Y=car_data, X=policy_data, stand.Y=TRUE, stand.X=TRUE, permutations=5000)->data.cor
+
+#Correlations between the original variables and the first canonical axis 
+X_Correlations <- round(data.cor$corr.X.Cx[,1], 2)
+Y_Correlations <- round(data.cor$corr.Y.Cy[,1], 2)
+
+X_Correlations
+Y_Correlations
+
+
+#Biplot of original X variable and the first canonical axis 
+CCplot(data.cor)
+```
+
+# Strength and statistical significance of the relationship between these two matrices
+
+There is a significant relationship between the sets of variables "policy/policy holder" and "attributes of the car." The Pillai's trace has a extremely small P-value (less than 2.22e-16), indicating strong evidence against the null hypothesis (that the data has occurred by chance). 
+
+The R squares for the reduced major axis (RMA) are relatively small (0.033, 0.028), indicating a relatively weak relationship between the two sets of variables. This means a low proportion of variance (R squares) can be explained by the canonical correlation analysis, indicating the canonical correlation analysis may not explain a huge amount of variance in the data.
+
+# Correlations between the original variables and the first canonical axis. 
+The correlations between the original and the first canonical axis reflect the strength and direction of the relationship between each variable and the first canonical axis.
+
+In the case of describing the relationship between policy information : 
+
+* Policy tenature has a correlation of 0.91 suggesting a strong poistive relationship between these variables, indicating that as policy tenure increases, the value of the first canonical axis increases. 
+
+* Population density has a correlation of -0.39, suggesting a moderate negative relationship between these variables, indicating that as population density increases, the value of the first canonical axis decreases. This means there is a decrease in the correlation between the linear combinations of the variables in this set relative to the linear combination of variables in the other set 
+
+* Age of Policyholder has a correlation of -0.17 suggesting a weak negative relationship between these variables, indicating that as age of the policy holder increases, the value of the first canonical axis will decrease. 
+
+
+In the case of describing the relationship between attributes of the car...
+
+The following have a moderate positive relationship with the first canonical axis with a canonical correlation of 
+* Age of Car (0.68)
+* Turning Radius (0.67)
+* Torque (0.61)
+* Gross Weight (0.58)
+* Height (0.54)
+Indicating that as the value of these variables increase, so does the value of the first canoncal axis. As the strength of the relationship is moderate, the variable may be moderately important in explaining the variation capture by the first canonical axis 
+
+The following have a strong positive relationship with the first canonical axis with a canonical correlation of 
+* Nconvenience (0.85)
+* Width (0.84)
+* Length (0.78)
+* NCap Rating (0.71)
+Indicating the variables are highly correlated with the underlying relationship between the car data and policy data. This means that changes/variation in one set of variables is related to the variation in the car data is related to the variation in the policy data.  
+
+The follow have a very weak positive correlation with the first canonical axis :
+* Torque RPM (0.03)
+Indicating there is little / no linear relationship between car data and policy data, meaning changes in one dataset are not consistent/predictable with changes in the other. However there may be other relationships/factors not capture by the linear correlation coefficient (does not mean there is necessarily no relationship). 
+
+# Relationship embodied by the first canonical axis pair.
+Regarding Car Data, the arrows for turning radius, length, width,  gross weight, nconvenience, and torque.rpm are all pointing in the same direction relatively close together, indicating the variables are strongly correlated with each other. In addition, they extending beyond the inner rim suggesting a moderate/strong relationship between the variables and the canonical axis. 
+
+Similarly, the variables; ncap, age, and height, are all pointing in the same direction relatively close together, indicating the variables are correlated with each other. The extend just further than the inner rim, suggesting a moderate relationship between the variables and the canonical variance. 
+
+Regarding Policy Data, the arrows for "age of policy holder" and "policy tenure" reach to the outer rims of the circle, indicating all information in the variable is explained by the combination of the two canonical axis. The variable "population density" has a shorter arrow indicating a weaker correlation between it and the canonical axis.
+
+
